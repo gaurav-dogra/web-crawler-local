@@ -12,8 +12,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Listener {
 
@@ -55,7 +55,7 @@ public class Listener {
     }
 
     public void start() {
-        System.out.println("Listener.start");
+        long start = System.currentTimeMillis();
         String inputtedUrl = urlTextField.getText().toLowerCase();
         prescribedDepth = getPrescribedDepth();
         logger.info("Input url is " + inputtedUrl);
@@ -64,7 +64,9 @@ public class Listener {
         System.out.println("prescribed depth is " + prescribedDepth);
         urlAndTitleCollection.clear();
         collectUrlsRecursivelyFrom(inputtedUrl);
-        printResultsToFile();
+        long end = System.currentTimeMillis();
+        System.out.println("Time taken: " + (end - start));
+//        printResultsToFile();
     }
 
     private int getPrescribedDepth() {
@@ -85,6 +87,9 @@ public class Listener {
     }
 
     private void collectUrlsRecursivelyFrom(Set<String> passedUrls) {
+        int workers = Integer.parseInt(workersTextField.getText());
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
+
         if (exceedingPrescribedDepth()) {
             return;
         }
@@ -93,36 +98,23 @@ public class Listener {
 
         for (String url : passedUrls) {
             logger.info("Collecting urls from url {} at level {}", url, currentDepth);
+            System.out.printf("Collecting urls from url %s at level %s\n", url, currentDepth);
+            executor.submit(new ProcessUrl(url));
             System.out.println("url = " + url);
-            String htmlText;
-            try {
-                htmlText = ProcessUrl.getHtmlTextFrom(url);
-            } catch (Exception e) {
-                logger.debug("Not able to get Html text from {}", url);
-                continue;
-            }
-
-            String title = null;
-            try {
-                title = getTitle(htmlText);
-            } catch (WebCrawlerException e) {
-                logger.debug(url + ":" + e.getMessage());
-            }
-            if (title != null) {
-                urlAndTitleCollection.put(url, title);
-                System.out.println("url = " + url + ":: title = " + title);
-                Set<String> urlsFromCurrentUrl = ProcessUrl.collectAllUrlsFrom(htmlText);
-                logger.info("Collected {} urls from url {}", urlsFromCurrentUrl.size(), url);
-                System.out.printf("Collected %s urls from url %s\n", urlsFromCurrentUrl.size(), url);
-                currentLevelUrls.addAll(urlsFromCurrentUrl);
-            }
-        }
-
-        if (currentLevelUrls.size() > 0) {
-            logger.info("{} urls added to masterUrlList", currentLevelUrls.size());
-            collectUrlsRecursivelyFrom(currentLevelUrls);
+            ProcessUrl processor = new ProcessUrl(url);
+            urlAndTitleCollection.putAll(processor.getUrlsAndTitles());
+            currentLevelUrls.addAll(processor.getAllUrls());
         }
     }
+
+        if(currentLevelUrls.size()>0)
+
+    {
+        logger.info("{} urls added to masterUrlList", currentLevelUrls.size());
+        collectUrlsRecursivelyFrom(currentLevelUrls);
+    }
+
+}
 
     private void printResultsToFile() {
         String fileName = exportUrlTextField.getText();
@@ -149,14 +141,8 @@ public class Listener {
         return currentDepth > prescribedDepth;
     }
 
-    private String getTitle(String htmlText) throws WebCrawlerException{
-        Pattern pattern = Pattern.compile("<title>(.+)</title>");
-        Matcher matcher = pattern.matcher(htmlText);
-        if (matcher.find()) {
-            return matcher.group(1);
-        } else {
-            throw new WebCrawlerException("Not able to get title from html text");
-        }
+    private String getTitle(String htmlText) throws WebCrawlerException {
+
     }
 
 }
