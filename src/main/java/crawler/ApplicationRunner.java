@@ -1,7 +1,6 @@
 package crawler;
 
 import org.slf4j.Logger;
-
 import javax.swing.*;
 
 public class ApplicationRunner {

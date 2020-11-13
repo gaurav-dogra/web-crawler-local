@@ -13,20 +13,14 @@ import java.util.regex.Pattern;
 
 public class ProcessUrl implements Runnable {
 
-    public Map<String, String> getUrlsAndTitles() {
-        return urlsAndTitles;
-    }
-
-    public Set<String> getAllUrls() {
-        return allUrls;
-    }
-
     private final String url;
-    private Map<String, String> urlsAndTitles;
-    private Set<String> allUrls = new HashSet<>();
 
-    public ProcessUrl(String url) {
+    private Map<String, String> urlsAndTitles;
+    private Set<String> currentLevelUrls = new HashSet<>();
+
+    public ProcessUrl(String url, Set<String> currentLevelUrls) {
         this.url = url;
+        this.currentLevelUrls = currentLevelUrls;
     }
 
     @Override
@@ -40,7 +34,7 @@ public class ProcessUrl implements Runnable {
             String title = getTitle(htmlText);
             if (title != null) {
                 collectAllUrls(htmlText);
-                synchronized(this) {
+                synchronized (this) {
                     urlsAndTitles.put(url, title);
                 }
             }
@@ -77,7 +71,7 @@ public class ProcessUrl implements Runnable {
             if (!url.startsWith("http")) {
                 url = "https:" + url;
             }
-            allUrls.add(url);
+            currentLevelUrls.add(url);
         }
     }
 }

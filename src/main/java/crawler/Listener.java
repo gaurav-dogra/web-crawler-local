@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Listener {
 
@@ -99,22 +100,28 @@ public class Listener {
         for (String url : passedUrls) {
             logger.info("Collecting urls from url {} at level {}", url, currentDepth);
             System.out.printf("Collecting urls from url %s at level %s\n", url, currentDepth);
-            executor.submit(new ProcessUrl(url));
-            System.out.println("url = " + url);
-            ProcessUrl processor = new ProcessUrl(url);
-            urlAndTitleCollection.putAll(processor.getUrlsAndTitles());
-            currentLevelUrls.addAll(processor.getAllUrls());
+            ProcessUrl processor = new ProcessUrl(url, currentLevelUrls);
+            executor.submit(processor);
+        }
+
+        executor.shutdown();
+        System.out.println("All tasks submitted");
+
+        try {
+            String timeOutLimitInSeconds = timeLimitTextField.getText();
+            if (!timeOutLimitInSeconds.equals("") && timeLimitEnabledCB.isEnabled()) {
+                System.out.println("timeOutLimitInSeconds = " + timeOutLimitInSeconds);
+                int timeOutLimit = Integer.parseInt(timeOutLimitInSeconds);
+                executor.awaitTermination(timeOutLimit, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        if (currentLevelUrls.size() > 0) {
+            logger.info("{} urls added to masterUrlList", currentLevelUrls.size());
+            collectUrlsRecursivelyFrom(currentLevelUrls);
         }
     }
-
-        if(currentLevelUrls.size()>0)
-
-    {
-        logger.info("{} urls added to masterUrlList", currentLevelUrls.size());
-        collectUrlsRecursivelyFrom(currentLevelUrls);
-    }
-
-}
 
     private void printResultsToFile() {
         String fileName = exportUrlTextField.getText();
@@ -139,10 +146,6 @@ public class Listener {
     private boolean exceedingPrescribedDepth() {
         currentDepth++;
         return currentDepth > prescribedDepth;
-    }
-
-    private String getTitle(String htmlText) throws WebCrawlerException {
-
     }
 
 }
