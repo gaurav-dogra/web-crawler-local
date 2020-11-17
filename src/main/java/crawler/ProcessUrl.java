@@ -5,41 +5,32 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class ProcessUrl implements Runnable {
+public class ProcessUrl implements Callable<Map<String, Set<String>>> {
 
     private final String url;
 
-    private Map<String, String> urlsAndTitles;
-    private Set<String> currentLevelUrls = new HashSet<>();
-
-    public ProcessUrl(String url, Set<String> currentLevelUrls) {
+    public ProcessUrl(String url) {
         this.url = url;
-        this.currentLevelUrls = currentLevelUrls;
     }
 
     @Override
-    public void run() {
-        processUrl();
-    }
-
-    private void processUrl() {
+    public Map<String, Set<String>> call() throws Exception {
+        Map<String, Set<String>> titleAndUrls = new HashMap<>();
         String htmlText = getHtmlText();
         if (htmlText != null) {
-            String title = getTitle(htmlText);
-            if (title != null) {
-                collectAllUrls(htmlText);
-                synchronized (this) {
-                    urlsAndTitles.put(url, title);
-                }
-            }
+            String title = getTitleFrom(htmlText);
+            Set<String> urls = collectURLsFrom(htmlText);
+            titleAndUrls.put(title, urls);
         }
-
+        return titleAndUrls;
     }
 
     private String getHtmlText() {
@@ -53,7 +44,7 @@ public class ProcessUrl implements Runnable {
         }
     }
 
-    private String getTitle(String htmlText) {
+    private String getTitleFrom(String htmlText) {
         Pattern pattern = Pattern.compile("<title>(.+)</title>");
         Matcher matcher = pattern.matcher(htmlText);
         if (matcher.find()) {
@@ -63,7 +54,8 @@ public class ProcessUrl implements Runnable {
         }
     }
 
-    public void collectAllUrls(String htmlText) {
+    public Set<String> collectURLsFrom(String htmlText) {
+        Set<String> urls = new HashSet<>();
         Pattern pattern = Pattern.compile("(?i)<a\\s+(?:[^>].*)?href=(['\"])(.*\\..*?)\\1");
         Matcher matcher = pattern.matcher(htmlText);
         while (matcher.find()) {
@@ -71,7 +63,9 @@ public class ProcessUrl implements Runnable {
             if (!url.startsWith("http")) {
                 url = "https:" + url;
             }
-            currentLevelUrls.add(url);
+            urls.add(url);
         }
+        return urls;
     }
+
 }

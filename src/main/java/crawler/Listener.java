@@ -8,13 +8,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class Listener {
 
@@ -63,11 +58,12 @@ public class Listener {
         System.out.println("input url is " + inputtedUrl);
         logger.info("prescribed depth is " + prescribedDepth);
         System.out.println("prescribed depth is " + prescribedDepth);
+        System.out.println("max time is " + timeLimitTextField.getText());
         urlAndTitleCollection.clear();
         collectUrlsRecursivelyFrom(inputtedUrl);
         long end = System.currentTimeMillis();
         System.out.println("Time taken: " + (end - start));
-//        printResultsToFile();
+        printResultsToFile();
     }
 
     private int getPrescribedDepth() {
@@ -82,26 +78,30 @@ public class Listener {
     }
 
     private void collectUrlsRecursivelyFrom(String inputtedUrl) {
-        Set<String> initial = new HashSet<>();
-        initial.add(inputtedUrl);
-        collectUrlsRecursivelyFrom(initial);
+        ConcurrentLinkedQueue<String> initialUrl = new ConcurrentLinkedQueue<>();
+        initialUrl.add(inputtedUrl);
+        collectUrlsRecursivelyFrom(initialUrl);
     }
 
-    private void collectUrlsRecursivelyFrom(Set<String> passedUrls) {
+    private void collectUrlsRecursivelyFrom(ConcurrentLinkedQueue<String> passedUrls) {
         int workers = Integer.parseInt(workersTextField.getText());
         ExecutorService executor = Executors.newFixedThreadPool(workers);
+
+        logger.info("current depth: {}", currentDepth);
+        System.out.println("currentDepth = " + currentDepth);
 
         if (exceedingPrescribedDepth()) {
             return;
         }
-        logger.info("current depth: " + currentDepth);
+
         Set<String> currentLevelUrls = new HashSet<>();
+        List<Future> allFutures = new ArrayList<>();
 
         for (String url : passedUrls) {
             logger.info("Collecting urls from url {} at level {}", url, currentDepth);
             System.out.printf("Collecting urls from url %s at level %s\n", url, currentDepth);
-            ProcessUrl processor = new ProcessUrl(url, currentLevelUrls);
-            executor.submit(processor);
+            ProcessUrl processor = new ProcessUrl(url);
+            allFutures.add(executor.submit(processor));
         }
 
         executor.shutdown();
@@ -110,7 +110,6 @@ public class Listener {
         try {
             String timeOutLimitInSeconds = timeLimitTextField.getText();
             if (!timeOutLimitInSeconds.equals("") && timeLimitEnabledCB.isEnabled()) {
-                System.out.println("timeOutLimitInSeconds = " + timeOutLimitInSeconds);
                 int timeOutLimit = Integer.parseInt(timeOutLimitInSeconds);
                 executor.awaitTermination(timeOutLimit, TimeUnit.SECONDS);
             }
@@ -118,7 +117,6 @@ public class Listener {
             e.printStackTrace();
         }
         if (currentLevelUrls.size() > 0) {
-            logger.info("{} urls added to masterUrlList", currentLevelUrls.size());
             collectUrlsRecursivelyFrom(currentLevelUrls);
         }
     }
