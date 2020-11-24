@@ -4,7 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 
 
-public class WebCrawler extends JFrame {
+public class WebCrawlerFrame extends JFrame {
 
     //first row
     private final JLabel startURLLabel = new JLabel("Start URL:");
@@ -33,10 +33,10 @@ public class WebCrawler extends JFrame {
     private final JTextField exportUrlTextField = new JTextField();
     private final JButton exportButton = new JButton("Save");
 
-    public WebCrawler() {
+    public WebCrawlerFrame() {
         setNames();
         addActionListeners();
-        placeComponents();
+        placeComponentsOnFrame();
         initialize();
     }
 
@@ -56,7 +56,7 @@ public class WebCrawler extends JFrame {
 //        exportButton.addActionListener(ae -> saveAction());
     }
 
-    private void placeComponents() {
+    private void placeComponentsOnFrame() {
         Container pane = this.getContentPane();
         pane.setLayout(new GridBagLayout());
 
@@ -198,7 +198,7 @@ public class WebCrawler extends JFrame {
     }
 
     private void buttonAction() {
-        new Listener(this).start();
+        new Listener(this).startCrawling();
     }
 
     public JTextField getUrlTextField() {
@@ -225,7 +225,7 @@ public class WebCrawler extends JFrame {
         return timeLimitTextField;
     }
 
-    public JCheckBox getTimeLimitEnabledCB() {
+    public JCheckBox getTimeLimitCheckBox() {
         return timeLimitEnabledCB;
     }
 

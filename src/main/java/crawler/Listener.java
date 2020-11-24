@@ -2,7 +2,6 @@ package crawler;
 
 import org.slf4j.Logger;
 
-import javax.swing.*;
 import java.io.BufferedWriter;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -13,79 +12,80 @@ import java.util.concurrent.*;
 
 public class Listener {
 
-    private final WebCrawler crawler;
-    private final Map<String, String> urlAndTitleCollection = new HashMap<>();
-    private JTextField urlTextField;
-    private JToggleButton runButton;
-    private JTextField workersTextField;
-    private JTextField depthTextField;
-    private JCheckBox depthCheckBox;
-    private JTextField timeLimitTextField;
-    private JCheckBox timeLimitEnabledCB;
-    private JLabel elapsedTimeActual;
-    private JLabel parsedPagesActual;
-    private JTextField exportUrlTextField;
-    private JButton exportButton;
+    private final WebCrawlerFrame crawler;
+    private final List<UrlData> results = new ArrayList<>();
 
     private final Logger logger = MyLogger.getLogger();
-    private int currentDepth;
-    private int prescribedDepth;
+    private static final int DEFAULT_TIME_LIMIT_SECONDS = 100;
+    private static final int DEFAULT_DEPTH = 2;
 
-    public Listener(WebCrawler crawler) {
+    public Listener(WebCrawlerFrame crawler) {
         this.crawler = crawler;
-        getFieldsFromUI();
     }
 
-    private void getFieldsFromUI() {
-        this.urlTextField = crawler.getUrlTextField();
-        this.runButton = crawler.getRunButton();
-        this.workersTextField = crawler.getWorkersTextField();
-        this.depthTextField = crawler.getDepthTextField();
-        this.depthCheckBox = crawler.getDepthCheckBox();
-        this.timeLimitTextField = crawler.getTimeLimitTextField();
-        this.timeLimitEnabledCB = crawler.getTimeLimitEnabledCB();
-        this.elapsedTimeActual = crawler.getElapsedTimeActual();
-        this.parsedPagesActual = crawler.getParsedPagesActual();
-        this.exportUrlTextField = crawler.getExportUrlTextField();
-        this.exportButton = crawler.getExportButton();
-    }
-
-    public void start() {
-        long start = System.currentTimeMillis();
-        String inputtedUrl = urlTextField.getText().toLowerCase();
-        prescribedDepth = getPrescribedDepth();
-        logger.info("Input url is " + inputtedUrl);
-        System.out.println("input url is " + inputtedUrl);
-        logger.info("prescribed depth is " + prescribedDepth);
-        System.out.println("prescribed depth is " + prescribedDepth);
-        System.out.println("max time is " + timeLimitTextField.getText());
-        urlAndTitleCollection.clear();
-        collectUrlsRecursivelyFrom(inputtedUrl);
+    public void startCrawling() {
+        long startTime = System.currentTimeMillis();
+        crawler.getRunButton().setEnabled(false);
+        String firstUrl = crawler.getUrlTextField().getText().toLowerCase();
+        results.clear();
+        crawl(firstUrl);
         long end = System.currentTimeMillis();
-        System.out.println("Time taken: " + (end - start));
-        printResultsToFile();
+        System.out.println("Time taken: " + (end - startTime));
+        System.out.println("And " + results.size() + " url's Data collected");
+//        printResultsToFile();
     }
 
-    private int getPrescribedDepth() {
-        if (depthCheckBox.isSelected()) {
+    private int getDepth() {
+        if (crawler.getDepthCheckBox().isSelected()) {
             try {
-                return Integer.parseInt(depthTextField.getText());
+                return Integer.parseInt(crawler.getDepthTextField().getText());
             } catch (NumberFormatException e) {
-                logger.info("prescribed depth is not given, so it is set to Max Integer Value");
+                logger.info("prescribed depth is not given, so setting it to {}", DEFAULT_DEPTH);
             }
         }
-        return Integer.MAX_VALUE;
+        return DEFAULT_DEPTH;
     }
 
-    private void collectUrlsRecursivelyFrom(String inputtedUrl) {
-        ConcurrentLinkedQueue<String> initialUrl = new ConcurrentLinkedQueue<>();
-        initialUrl.add(inputtedUrl);
-        collectUrlsRecursivelyFrom(initialUrl);
+    private int getMaxTime() {
+        if (crawler.getTimeLimitCheckBox().isSelected()) {
+            try {
+                return Integer.parseInt(crawler.getTimeLimitTextField().getText());
+            } catch (NumberFormatException e) {
+                logger.info("Maximum time is not given, so setting it to {}", DEFAULT_TIME_LIMIT_SECONDS);
+            }
+        }
+        return DEFAULT_TIME_LIMIT_SECONDS;
     }
 
-    private void collectUrlsRecursivelyFrom(ConcurrentLinkedQueue<String> passedUrls) {
-        int workers = Integer.parseInt(workersTextField.getText());
+    private int getNoOfThreads() {
+        try {
+            return Integer.parseInt(crawler.getWorkersTextField().getText());
+        } catch (NumberFormatException e) {
+            logger.info("Setting number of workers to default of 2");
+        }
+        return 2;
+    }
+
+    private void crawl(String inputUrl) {
+
+        UrlData data = null;
+        try {
+            data = UrlProcessingService.getData(inputUrl);
+        } catch (IOException e) {
+            logger.info("Unable to process url: {}", inputUrl);
+            return;
+        }
+        results.add(data);
+        crawl(data.getUrls());
+    }
+
+    private void crawl(Set<String> passedUrls) {
+        int workers = getNoOfThreads();
+        int depth = getDepth();
+        int maxTime = getMaxTime();
+
         ExecutorService executor = Executors.newFixedThreadPool(workers);
+        Set<String> nextLevelUrls = new HashSet<>();
 
         logger.info("current depth: {}", currentDepth);
         System.out.println("currentDepth = " + currentDepth);
@@ -94,31 +94,33 @@ public class Listener {
             return;
         }
 
-        Set<String> currentLevelUrls = new HashSet<>();
-        List<Future> allFutures = new ArrayList<>();
+        List<Future<UrlData>> allFutures = new ArrayList<>();
 
         for (String url : passedUrls) {
             logger.info("Collecting urls from url {} at level {}", url, currentDepth);
             System.out.printf("Collecting urls from url %s at level %s\n", url, currentDepth);
-            ProcessUrl processor = new ProcessUrl(url);
-            allFutures.add(executor.submit(processor));
+            Future<UrlData> future = executor.submit(new UrlProcessingService(url));
+            allFutures.add(future);
         }
-
-        executor.shutdown();
         System.out.println("All tasks submitted");
 
-        try {
-            String timeOutLimitInSeconds = timeLimitTextField.getText();
-            if (!timeOutLimitInSeconds.equals("") && timeLimitEnabledCB.isEnabled()) {
-                int timeOutLimit = Integer.parseInt(timeOutLimitInSeconds);
-                executor.awaitTermination(timeOutLimit, TimeUnit.SECONDS);
+        for (Future<UrlData> future : allFutures) {
+            UrlData oneUrlData;
+            try {
+                oneUrlData = future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+                continue;
             }
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+            if (oneUrlData != null) {
+                System.out.println("from the future " + oneUrlData);
+                results.add(oneUrlData);
+                nextLevelUrls.addAll(oneUrlData.getUrls());
+            }
         }
-        if (currentLevelUrls.size() > 0) {
-            collectUrlsRecursivelyFrom(currentLevelUrls);
-        }
+        currentDepth++;
+        System.out.println(nextLevelUrls.size() + " urls at level " + currentDepth);
+        crawl(nextLevelUrls);
     }
 
     private void printResultsToFile() {
@@ -127,12 +129,14 @@ public class Listener {
             System.out.println("No file name given, so saving to output.txt");
             fileName = "output.txt";
         }
+
+        System.out.println("data size = " + results.size());
         try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
                 new FileOutputStream(fileName), StandardCharsets.UTF_8))) {
-            for (String url : urlAndTitleCollection.keySet()) {
-                writer.write(url);
+            for (UrlData oneUrlData : results) {
+                writer.write(oneUrlData.getUrl());
                 writer.newLine();
-                writer.write(urlAndTitleCollection.get(url));
+                writer.write(oneUrlData.getTitle());
                 writer.newLine();
             }
         } catch (IOException e) {
@@ -142,8 +146,7 @@ public class Listener {
     }
 
     private boolean exceedingPrescribedDepth() {
-        currentDepth++;
-        return currentDepth > prescribedDepth;
+        return currentDepth > depth;
     }
 
 }
