@@ -229,7 +229,7 @@ public class WebCrawlerFrame extends JFrame {
         return timeLimitEnabledCB;
     }
 
-    public JLabel getElapsedTimeActual() {
+    public JLabel getElapsedTimeLabel() {
         return elapsedTimeActual;
     }
 

@@ -7,15 +7,22 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class UrlProcessingService {
+public class UrlProcessingService implements Callable<UrlData> {
+
+    private final String url;
+
+    public UrlProcessingService(String url) {
+        this.url = url;
+    }
 
     public static UrlData getData(String url) throws IOException {
         String htmlText = getHtmlText(url);
         String title = getTitle(htmlText);
-        Set<String> urls = getUrls(htmlText);
+        Set<String> urls = collectUrls(htmlText);
         UrlData data = new UrlData(url, title, urls);
         System.out.println(data);
         return data;
@@ -34,14 +41,14 @@ public class UrlProcessingService {
         Pattern pattern = Pattern.compile("<title>(.+)</title>");
         Matcher matcher = pattern.matcher(htmlText);
         if (matcher.find()) {
-            System.out.println("matcher.group(1) = " + matcher.group(1));
+//            System.out.println("matcher.group(1) = " + matcher.group(1));
             return matcher.group(1);
         } else {
             return "NO TITLE FOUND";
         }
     }
 
-    public static Set<String> getUrls(String htmlText) {
+    public static Set<String> collectUrls(String htmlText) {
         Set<String> urls = new HashSet<>();
         Pattern pattern = Pattern.compile("(?i)<a\\s+(?:[^>].*)?href=(['\"])(.*\\..*?)\\1");
         Matcher matcher = pattern.matcher(htmlText);
@@ -55,4 +62,8 @@ public class UrlProcessingService {
         return urls;
     }
 
+    @Override
+    public UrlData call() throws Exception {
+        return UrlProcessingService.getData(url);
+    }
 }

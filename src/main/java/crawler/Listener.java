@@ -2,37 +2,68 @@ package crawler;
 
 import org.slf4j.Logger;
 
-import java.io.BufferedWriter;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class Listener {
 
     private final WebCrawlerFrame crawler;
+//    private final List<UrlData> results = Collections.synchronizedList(new ArrayList<>());
     private final List<UrlData> results = new ArrayList<>();
-
+    private MyTimer timer;
     private final Logger logger = MyLogger.getLogger();
-    private static final int DEFAULT_TIME_LIMIT_SECONDS = 100;
+    private static final int DEFAULT_TIME_LIMIT_SECONDS = 90_000;
     private static final int DEFAULT_DEPTH = 2;
+    private static final int DEFAULT_NO_OF_WORKERS = 2;
+    private final int noOfWorkers;
+    private int prescribedDepth;
+    private boolean isTimeLimited = false;
+    private boolean isDepthLimited = false;
 
     public Listener(WebCrawlerFrame crawler) {
         this.crawler = crawler;
+        if (crawler.getTimeLimitCheckBox().isEnabled()) {
+            isTimeLimited = true;
+            startTimer(getTimeLimit());
+        }
+
+        if (crawler.getDepthCheckBox().isEnabled()) {
+            isDepthLimited = true;
+            prescribedDepth = getDepth();
+        }
+
+        String workerValue = crawler.getWorkersTextField().getText();
+        noOfWorkers = workerValue.equals("") ? parseToInt(workerValue) : DEFAULT_NO_OF_WORKERS;
     }
 
     public void startCrawling() {
-        long startTime = System.currentTimeMillis();
         crawler.getRunButton().setEnabled(false);
         String firstUrl = crawler.getUrlTextField().getText().toLowerCase();
+
+
         results.clear();
-        crawl(firstUrl);
-        long end = System.currentTimeMillis();
-        System.out.println("Time taken: " + (end - startTime));
+        crawlFirstUrl(firstUrl);
         System.out.println("And " + results.size() + " url's Data collected");
 //        printResultsToFile();
+    }
+
+    private void startTimer(Long timeLimitSeconds) {
+        timer = new MyTimer(crawler.getElapsedTimeLabel(), timeLimitSeconds);
+        timer.execute();
+    }
+
+    private Long getTimeLimit() {
+        long timeLimitSeconds;
+        try {
+            timeLimitSeconds = Long.parseLong(crawler.getTimeLimitTextField().getText());
+        } catch (NumberFormatException e) {
+            timeLimitSeconds = DEFAULT_TIME_LIMIT_SECONDS;
+        }
+        return timeLimitSeconds;
     }
 
     private int getDepth() {
@@ -46,29 +77,18 @@ public class Listener {
         return DEFAULT_DEPTH;
     }
 
-    private int getMaxTime() {
-        if (crawler.getTimeLimitCheckBox().isSelected()) {
-            try {
-                return Integer.parseInt(crawler.getTimeLimitTextField().getText());
-            } catch (NumberFormatException e) {
-                logger.info("Maximum time is not given, so setting it to {}", DEFAULT_TIME_LIMIT_SECONDS);
-            }
-        }
-        return DEFAULT_TIME_LIMIT_SECONDS;
-    }
-
-    private int getNoOfThreads() {
+    private int parseToInt(String value) {
         try {
-            return Integer.parseInt(crawler.getWorkersTextField().getText());
+            return Integer.parseInt(value);
         } catch (NumberFormatException e) {
             logger.info("Setting number of workers to default of 2");
         }
-        return 2;
+        return DEFAULT_NO_OF_WORKERS;
     }
 
-    private void crawl(String inputUrl) {
+    private void crawlFirstUrl(String inputUrl) {
 
-        UrlData data = null;
+        UrlData data;
         try {
             data = UrlProcessingService.getData(inputUrl);
         } catch (IOException e) {
@@ -76,77 +96,70 @@ public class Listener {
             return;
         }
         results.add(data);
-        crawl(data.getUrls());
+
+        int currentDepth = 0;
+        crawlOnwards(data.getUrls(), currentDepth);
     }
 
-    private void crawl(Set<String> passedUrls) {
-        int workers = getNoOfThreads();
-        int depth = getDepth();
-        int maxTime = getMaxTime();
-
-        ExecutorService executor = Executors.newFixedThreadPool(workers);
-        Set<String> nextLevelUrls = new HashSet<>();
-
-        logger.info("current depth: {}", currentDepth);
-        System.out.println("currentDepth = " + currentDepth);
-
-        if (exceedingPrescribedDepth()) {
+    private void crawlOnwards(Set<String> urlCollection, int currentDepth) {
+        if (!depthAndTimeCheck(++currentDepth)) {
             return;
         }
 
-        List<Future<UrlData>> allFutures = new ArrayList<>();
+        ExecutorService executor = Executors.newFixedThreadPool(noOfWorkers);
+//        Set<String> currentLevelUrls = Collections.synchronizedSet(new HashSet<>());
+        Set<String> currentLevelUrls = new HashSet<>();
 
-        for (String url : passedUrls) {
-            logger.info("Collecting urls from url {} at level {}", url, currentDepth);
-            System.out.printf("Collecting urls from url %s at level %s\n", url, currentDepth);
-            Future<UrlData> future = executor.submit(new UrlProcessingService(url));
-            allFutures.add(future);
+        List<Future<UrlData>> futures = new ArrayList<>();
+        for (String url : urlCollection) {
+            futures.add(executor.submit(new UrlProcessingService(url)));
         }
-        System.out.println("All tasks submitted");
-
-        for (Future<UrlData> future : allFutures) {
-            UrlData oneUrlData;
+        for (Future<UrlData> future : futures) {
+            UrlData data;
             try {
-                oneUrlData = future.get();
+                data = future.get();
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
                 continue;
             }
-            if (oneUrlData != null) {
-                System.out.println("from the future " + oneUrlData);
-                results.add(oneUrlData);
-                nextLevelUrls.addAll(oneUrlData.getUrls());
-            }
+            currentLevelUrls.addAll(data.getUrls());
+            results.add(data);
         }
-        currentDepth++;
-        System.out.println(nextLevelUrls.size() + " urls at level " + currentDepth);
-        crawl(nextLevelUrls);
+        executor.shutdown();
+        crawlOnwards(currentLevelUrls, currentDepth);
     }
 
-    private void printResultsToFile() {
-        String fileName = exportUrlTextField.getText();
-        if (fileName.equals("")) {
-            System.out.println("No file name given, so saving to output.txt");
-            fileName = "output.txt";
+    private boolean depthAndTimeCheck(int currentDepth) {
+        if (isTimeLimited && timer.isDone()) {
+            return false;
         }
 
-        System.out.println("data size = " + results.size());
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
-                new FileOutputStream(fileName), StandardCharsets.UTF_8))) {
-            for (UrlData oneUrlData : results) {
-                writer.write(oneUrlData.getUrl());
-                writer.newLine();
-                writer.write(oneUrlData.getTitle());
-                writer.newLine();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (isDepthLimited && currentDepth > prescribedDepth) {
+            return false;
         }
-
+        return true;
     }
 
-    private boolean exceedingPrescribedDepth() {
-        return currentDepth > depth;
-    }
+//    private void printResultsToFile() {
+//        String fileName = exportUrlTextField.getText();
+//        if (fileName.equals("")) {
+//            System.out.println("No file name given, so saving to output.txt");
+//            fileName = "output.txt";
+//        }
+//
+//        System.out.println("data size = " + results.size());
+//        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+//                new FileOutputStream(fileName), StandardCharsets.UTF_8))) {
+//            for (UrlData oneUrlData : results) {
+//                writer.write(oneUrlData.getUrl());
+//                writer.newLine();
+//                writer.write(oneUrlData.getTitle());
+//                writer.newLine();
+//            }
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//
+//    }
 
 }
