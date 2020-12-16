@@ -37,7 +37,7 @@ public class WebCrawlerFrame extends JFrame {
         setNames();
         addActionListeners();
         placeComponentsOnFrame();
-        initialize();
+        initializeFrame();
     }
 
     private void setNames() {
@@ -52,7 +52,7 @@ public class WebCrawlerFrame extends JFrame {
     }
 
     private void addActionListeners() {
-        runButton.addActionListener(ae -> buttonAction());
+        runButton.addActionListener(ae -> runButtonAction());
 //        exportButton.addActionListener(ae -> saveAction());
     }
 
@@ -197,7 +197,7 @@ public class WebCrawlerFrame extends JFrame {
         pane.add(component, constraints);
     }
 
-    private void buttonAction() {
+    private void runButtonAction() {
         new Listener(this).startCrawling();
     }
 
@@ -245,7 +245,7 @@ public class WebCrawlerFrame extends JFrame {
         return exportButton;
     }
 
-    private void initialize() {
+    private void initializeFrame() {
         setTitle("Web Crawler");
         setPreferredSize(new Dimension(600, 250));
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

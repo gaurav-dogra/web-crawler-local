@@ -2,12 +2,12 @@ package crawler;
 
 import java.util.Set;
 
-public class UrlData {
+public class UrlAndData {
     private final String url;
     private final String title;
     private final Set<String> allUrls;
 
-    public UrlData(String url, String title, Set<String> allUrls) {
+    public UrlAndData(String url, String title, Set<String> allUrls) {
         this.url = url;
         this.title = title;
         this.allUrls = allUrls;
@@ -27,7 +27,7 @@ public class UrlData {
 
     @Override
     public boolean equals(Object obj) {
-        String newUrl = ((UrlData) obj).getUrl();
+        String newUrl = ((UrlAndData) obj).getUrl();
         return url.equals(newUrl);
     }
 

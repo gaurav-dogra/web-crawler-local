@@ -2,18 +2,26 @@ package crawler;
 
 import org.slf4j.Logger;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Listener {
 
     private final WebCrawlerFrame crawler;
-//    private final List<UrlData> results = Collections.synchronizedList(new ArrayList<>());
-    private final List<UrlData> results = new ArrayList<>();
+    private final Set<UrlAndData> urlsDataCollected = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Set<UrlAndData> previousData = new HashSet<>();
     private MyTimer timer;
     private final Logger logger = MyLogger.getLogger();
     private static final int DEFAULT_TIME_LIMIT_SECONDS = 90_000;
@@ -36,18 +44,15 @@ public class Listener {
             prescribedDepth = getDepth();
         }
 
-        String workerValue = crawler.getWorkersTextField().getText();
-        noOfWorkers = workerValue.equals("") ? parseToInt(workerValue) : DEFAULT_NO_OF_WORKERS;
+        noOfWorkers = getNumberOfWorkers();
     }
 
     public void startCrawling() {
         crawler.getRunButton().setEnabled(false);
         String firstUrl = crawler.getUrlTextField().getText().toLowerCase();
-
-
-        results.clear();
+        urlsDataCollected.clear();
         crawlFirstUrl(firstUrl);
-        System.out.println("And " + results.size() + " url's Data collected");
+        System.out.println("And " + urlsDataCollected.size() + " url's Data collected");
 //        printResultsToFile();
     }
 
@@ -77,9 +82,11 @@ public class Listener {
         return DEFAULT_DEPTH;
     }
 
-    private int parseToInt(String value) {
+    private int getNumberOfWorkers() {
+        String workerValue = crawler.getWorkersTextField().getText();
+
         try {
-            return Integer.parseInt(value);
+            return Integer.parseInt(workerValue);
         } catch (NumberFormatException e) {
             logger.info("Setting number of workers to default of 2");
         }
@@ -87,58 +94,102 @@ public class Listener {
     }
 
     private void crawlFirstUrl(String inputUrl) {
-
-        UrlData data;
+        UrlAndData data;
         try {
-            data = UrlProcessingService.getData(inputUrl);
+            data = process(inputUrl);
         } catch (IOException e) {
-            logger.info("Unable to process url: {}", inputUrl);
+            System.out.println("The inputted Url is not correct");
             return;
         }
-        results.add(data);
-
+        urlsDataCollected.add(data);
         int currentDepth = 0;
         crawlOnwards(data.getUrls(), currentDepth);
     }
 
+    private UrlAndData process(String url) throws IOException {
+        System.out.println("Processing url = " + url);
+        String htmlText = getHtml(url);
+        String title = getTitle(htmlText);
+        Set<String> urls = collectUrls(htmlText);
+        return new UrlAndData(url, title, urls);
+    }
+
+    private String getHtml(String url) throws IOException {
+            InputStream inputStream = new BufferedInputStream(new URL(url).openStream());
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    private String getTitle(String html) {
+        Pattern pattern = Pattern.compile("<title>(.+)</title>");
+        Matcher matcher = pattern.matcher(html);
+        if (matcher.find()) {
+            return matcher.group(1);
+        } else {
+            return "NO TITLE FOUND";
+        }
+    }
+    private Set<String> collectUrls(String html) {
+        Set<String> urls = new HashSet<>();
+        Pattern pattern = Pattern.compile("(?i)<a\\s+(?:[^>].*)?href=(['\"])(.*\\..*?)\\1");
+        Matcher matcher = pattern.matcher(html);
+        while (matcher.find()) {
+            String url = matcher.group(2);
+            if (!url.startsWith("http")) {
+                url = "https:" + url;
+            }
+            urls.add(url);
+        }
+        return urls;
+    }
+
     private void crawlOnwards(Set<String> urlCollection, int currentDepth) {
-        if (!depthAndTimeCheck(++currentDepth)) {
+        if (depthExceedLimit(++currentDepth) || elapsedTimeExceedLimit()) {
             return;
         }
 
         ExecutorService executor = Executors.newFixedThreadPool(noOfWorkers);
-//        Set<String> currentLevelUrls = Collections.synchronizedSet(new HashSet<>());
-        Set<String> currentLevelUrls = new HashSet<>();
 
-        List<Future<UrlData>> futures = new ArrayList<>();
         for (String url : urlCollection) {
-            futures.add(executor.submit(new UrlProcessingService(url)));
-        }
-        for (Future<UrlData> future : futures) {
-            UrlData data;
-            try {
-                data = future.get();
-            } catch (InterruptedException | ExecutionException e) {
-                e.printStackTrace();
-                continue;
-            }
-            currentLevelUrls.addAll(data.getUrls());
-            results.add(data);
+            executor.execute(() -> {
+                try {
+                    urlsDataCollected.add(process(url));
+                } catch (IOException e) {
+                    System.out.println("Not able to process " + url);
+                }
+            });
         }
         executor.shutdown();
+        try {
+            if (!executor.awaitTermination(getTimeLimit(), TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+        }
+
+        Set<String> currentLevelUrls = getCurrentLevelUrls();
+        previousData.addAll(urlsDataCollected);
         crawlOnwards(currentLevelUrls, currentDepth);
     }
 
-    private boolean depthAndTimeCheck(int currentDepth) {
-        if (isTimeLimited && timer.isDone()) {
-            return false;
+    private Set<String> getCurrentLevelUrls() {
+        Set<UrlAndData> currentLevelUrlsAndData = new HashSet<>(urlsDataCollected);
+        currentLevelUrlsAndData.removeAll(previousData);
+        Set<String> currentLevelUrls = new HashSet<>();
+        for (UrlAndData data : currentLevelUrlsAndData) {
+            currentLevelUrls.addAll(data.getUrls());
         }
-
-        if (isDepthLimited && currentDepth > prescribedDepth) {
-            return false;
-        }
-        return true;
+        return currentLevelUrls;
     }
+
+    private boolean elapsedTimeExceedLimit() {
+        return isTimeLimited && timer.isDone();
+    }
+
+    private boolean depthExceedLimit(int currentDepth) {
+        return isDepthLimited && currentDepth > prescribedDepth;
+    }
+
 
 //    private void printResultsToFile() {
 //        String fileName = exportUrlTextField.getText();
