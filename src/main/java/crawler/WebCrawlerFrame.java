@@ -198,7 +198,7 @@ public class WebCrawlerFrame extends JFrame {
     }
 
     private void runButtonAction() {
-        new Listener(this).startCrawling();
+        new Listener().startCrawling(this);
     }
 
     public JTextField getUrlTextField() {

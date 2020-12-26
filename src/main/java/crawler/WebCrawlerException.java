@@ -1,6 +1,6 @@
 package crawler;
 
-public class WebCrawlerException extends Exception {
+public class WebCrawlerException extends RuntimeException {
 
     public WebCrawlerException() {
 

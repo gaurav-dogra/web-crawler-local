@@ -4,16 +4,16 @@ import javax.swing.*;
 import java.util.List;
 
 public class MyTimer extends SwingWorker<Long, Long> {
-    private final JLabel label;
+    private final JLabel elapsedTimeLabel;
     private final long timeLimitSeconds;
 
-    public MyTimer(JLabel elapsedTimeLabel, Long timeLimitSeconds) {
-        this.label = elapsedTimeLabel;
+    public MyTimer(JLabel elapsedTimeLabel, long timeLimitSeconds) {
+        this.elapsedTimeLabel = elapsedTimeLabel;
         this.timeLimitSeconds = timeLimitSeconds;
     }
 
     @Override
-    protected Long doInBackground() throws Exception {
+    protected Long doInBackground() {
         long timeAtStart = System.currentTimeMillis();
         long elapsedTime = 0;
         while (elapsedTime <= timeLimitSeconds) {
@@ -36,6 +36,6 @@ public class MyTimer extends SwingWorker<Long, Long> {
             seconds = (int) value;
         }
         String timeElapsed = String.format("%d:%02d", minutes, seconds);
-        label.setText(timeElapsed);
+        elapsedTimeLabel.setText(timeElapsed);
     }
 }

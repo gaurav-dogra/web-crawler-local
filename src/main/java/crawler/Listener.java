@@ -2,93 +2,84 @@ package crawler;
 
 import org.slf4j.Logger;
 
-import java.io.BufferedInputStream;
+import javax.swing.*;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class Listener {
 
-    private final WebCrawlerFrame crawler;
     private final Set<UrlAndData> urlsDataCollected = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<UrlAndData> previousData = new HashSet<>();
     private MyTimer timer;
     private final Logger logger = MyLogger.getLogger();
     private static final int DEFAULT_TIME_LIMIT_SECONDS = 90_000;
     private static final int DEFAULT_DEPTH = 2;
-    private static final int DEFAULT_NO_OF_WORKERS = 2;
-    private final int noOfWorkers;
+    private static final int DEFAULT_NO_OF_WORKERS = 10;
+    private int noOfWorkers;
     private int prescribedDepth;
     private boolean isTimeLimited = false;
     private boolean isDepthLimited = false;
 
-    public Listener(WebCrawlerFrame crawler) {
-        this.crawler = crawler;
+    public void startCrawling(WebCrawlerFrame crawler) {
+
+        long startingTime = System.currentTimeMillis();
+        crawler.getRunButton().setEnabled(false);
+
         if (crawler.getTimeLimitCheckBox().isEnabled()) {
             isTimeLimited = true;
-            startTimer(getTimeLimit());
+            startTimer(crawler.getElapsedTimeLabel(), getTimeLimit(crawler.getTimeLimitTextField().getText()));
         }
 
         if (crawler.getDepthCheckBox().isEnabled()) {
             isDepthLimited = true;
-            prescribedDepth = getDepth();
+            prescribedDepth = getDepth(crawler.getDepthTextField().getText());
         }
 
-        noOfWorkers = getNumberOfWorkers();
-    }
+        noOfWorkers = getNumberOfWorkers(crawler.getWorkersTextField().getText());
 
-    public void startCrawling() {
-        crawler.getRunButton().setEnabled(false);
-        String firstUrl = crawler.getUrlTextField().getText().toLowerCase();
+        String inputUrl = crawler.getUrlTextField().getText().toLowerCase();
         urlsDataCollected.clear();
-        crawlFirstUrl(firstUrl);
+        crawlFirstUrl(inputUrl);
         System.out.println("And " + urlsDataCollected.size() + " url's Data collected");
+        System.out.println("Time taken = " + (System.currentTimeMillis() - startingTime));
 //        printResultsToFile();
     }
 
-    private void startTimer(Long timeLimitSeconds) {
-        timer = new MyTimer(crawler.getElapsedTimeLabel(), timeLimitSeconds);
+    private void startTimer(JLabel elapsedTimeLabel, long timeLimitSeconds) {
+        timer = new MyTimer(elapsedTimeLabel, timeLimitSeconds);
         timer.execute();
     }
 
-    private Long getTimeLimit() {
+    private Long getTimeLimit(String userInputtedTimeLimit) {
         long timeLimitSeconds;
         try {
-            timeLimitSeconds = Long.parseLong(crawler.getTimeLimitTextField().getText());
+            timeLimitSeconds = Long.parseLong(userInputtedTimeLimit);
         } catch (NumberFormatException e) {
             timeLimitSeconds = DEFAULT_TIME_LIMIT_SECONDS;
         }
         return timeLimitSeconds;
     }
 
-    private int getDepth() {
-        if (crawler.getDepthCheckBox().isSelected()) {
-            try {
-                return Integer.parseInt(crawler.getDepthTextField().getText());
-            } catch (NumberFormatException e) {
-                logger.info("prescribed depth is not given, so setting it to {}", DEFAULT_DEPTH);
-            }
+    private int getDepth(String depth) {
+        try {
+            return Integer.parseInt(depth);
+        } catch (NumberFormatException e) {
+            logger.info("prescribed depth is not given, so setting it to {}", DEFAULT_DEPTH);
         }
         return DEFAULT_DEPTH;
     }
 
-    private int getNumberOfWorkers() {
-        String workerValue = crawler.getWorkersTextField().getText();
+    private int getNumberOfWorkers(String numberOfWorkers) {
 
         try {
-            return Integer.parseInt(workerValue);
+            return Integer.parseInt(numberOfWorkers);
         } catch (NumberFormatException e) {
-            logger.info("Setting number of workers to default of 2");
+            logger.info("Setting number of workers to default of 10");
         }
         return DEFAULT_NO_OF_WORKERS;
     }
@@ -103,43 +94,17 @@ public class Listener {
         }
         urlsDataCollected.add(data);
         int currentDepth = 0;
-        crawlOnwards(data.getUrls(), currentDepth);
+        System.out.println(data.getUrls());
+        System.out.println("Size() " + data.getUrls().size());
+//        crawlOnwards(data.getUrls(), currentDepth);
     }
 
     private UrlAndData process(String url) throws IOException {
-        System.out.println("Processing url = " + url);
-        String htmlText = getHtml(url);
-        String title = getTitle(htmlText);
-        Set<String> urls = collectUrls(htmlText);
+        UrlProcessingService service = new UrlProcessingService();
+        String htmlText = service.getHtml(url);
+        String title = service.getTitle(htmlText);
+        Set<String> urls = service.collectUrls(htmlText);
         return new UrlAndData(url, title, urls);
-    }
-
-    private String getHtml(String url) throws IOException {
-            InputStream inputStream = new BufferedInputStream(new URL(url).openStream());
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-    }
-
-    private String getTitle(String html) {
-        Pattern pattern = Pattern.compile("<title>(.+)</title>");
-        Matcher matcher = pattern.matcher(html);
-        if (matcher.find()) {
-            return matcher.group(1);
-        } else {
-            return "NO TITLE FOUND";
-        }
-    }
-    private Set<String> collectUrls(String html) {
-        Set<String> urls = new HashSet<>();
-        Pattern pattern = Pattern.compile("(?i)<a\\s+(?:[^>].*)?href=(['\"])(.*\\..*?)\\1");
-        Matcher matcher = pattern.matcher(html);
-        while (matcher.find()) {
-            String url = matcher.group(2);
-            if (!url.startsWith("http")) {
-                url = "https:" + url;
-            }
-            urls.add(url);
-        }
-        return urls;
     }
 
     private void crawlOnwards(Set<String> urlCollection, int currentDepth) {
@@ -148,24 +113,18 @@ public class Listener {
         }
 
         ExecutorService executor = Executors.newFixedThreadPool(noOfWorkers);
-
+//        System.out.println("urlCollection = " + urlCollection);
         for (String url : urlCollection) {
+
             executor.execute(() -> {
                 try {
                     urlsDataCollected.add(process(url));
-                } catch (IOException e) {
+                } catch (IOException | IllegalArgumentException e) {
                     System.out.println("Not able to process " + url);
                 }
             });
         }
         executor.shutdown();
-        try {
-            if (!executor.awaitTermination(getTimeLimit(), TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-        }
 
         Set<String> currentLevelUrls = getCurrentLevelUrls();
         previousData.addAll(urlsDataCollected);
