@@ -1,6 +1,7 @@
 package crawler;
 
 import org.slf4j.Logger;
+
 import javax.swing.*;
 
 public class ApplicationRunner {
@@ -9,5 +10,6 @@ public class ApplicationRunner {
         Logger logger = MyLogger.getLogger();
         logger.info("Starting application.....");
         SwingUtilities.invokeLater(WebCrawlerFrame::new);
+
     }
 }

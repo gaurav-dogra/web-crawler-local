@@ -12,14 +12,14 @@ import java.util.regex.Pattern;
 
 public class UrlProcessingService {
 
-    public String getHtml(String url) throws IOException, IllegalArgumentException {
+    public String getHtml(String url) throws WebCrawlerException {
         InputStream inputStream;
         try {
             inputStream = new BufferedInputStream(new URL(url).openStream());
-        } catch (IOException e) {
-            throw new IOException();
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException | IllegalArgumentException e) {
+            throw new WebCrawlerException(e.getMessage());
         }
-        return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
     }
 
     public String getTitle(String html) {
@@ -34,10 +34,13 @@ public class UrlProcessingService {
 
     public Set<String> collectUrls(String html) {
         Set<String> urls = new HashSet<>();
-        Pattern pattern = Pattern.compile("(?<=href=[\"']).*?(?=[\"'])");
+        Pattern pattern = Pattern.compile("<a.*(?<=href=[\"'])(.*?)(?=[\"'])");
         Matcher matcher = pattern.matcher(html);
         while (matcher.find()) {
-            String url = matcher.group();
+            String url = matcher.group(1);
+            if (url.equals("#")) {
+                continue;
+            }
             if (!url.startsWith("http")) {
                 url = "https:" + url;
             }
