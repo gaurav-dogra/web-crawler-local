@@ -3,7 +3,7 @@ package crawler;
 import javax.swing.*;
 import java.awt.*;
 
-
+//view
 public class WebCrawlerFrame extends JFrame {
 
     //first row
@@ -24,7 +24,7 @@ public class WebCrawlerFrame extends JFrame {
     private final JCheckBox timeLimitEnabledCB = new JCheckBox("Enabled");
     //fifth row
     private final JLabel elapsedTimeLabel = new JLabel("Elapsed time:");
-    private final JLabel elapsedTimeActual = new JLabel("0:00");
+    private final JLabel elapsedTimeCounter = new JLabel("0:00");
     //sixth row
     private final JLabel parsedLabel = new JLabel("Parsed pages:");
     private final JLabel parsedPagesActual = new JLabel("0");
@@ -35,7 +35,6 @@ public class WebCrawlerFrame extends JFrame {
 
     public WebCrawlerFrame() {
         setNames();
-        addActionListeners();
         placeComponentsOnFrame();
         initializeFrame();
     }
@@ -49,11 +48,6 @@ public class WebCrawlerFrame extends JFrame {
         exportUrlTextField.setName("ExportUrlTextField");
         exportButton.setName("ExportButton");
 
-    }
-
-    private void addActionListeners() {
-        runButton.addActionListener(ae -> runButtonAction());
-//        exportButton.addActionListener(ae -> saveAction());
     }
 
     private void placeComponentsOnFrame() {
@@ -153,7 +147,7 @@ public class WebCrawlerFrame extends JFrame {
         constraints = getFreshConstraints();
         constraints.gridy = 4;
         constraints.gridx = 1;
-        addComponent(pane, elapsedTimeActual, constraints);
+        addComponent(pane, elapsedTimeCounter, constraints);
     }
 
     private void setupSixthRow(Container pane) {
@@ -197,11 +191,7 @@ public class WebCrawlerFrame extends JFrame {
         pane.add(component, constraints);
     }
 
-    private void runButtonAction() {
-        new Listener().startCrawling(this);
-    }
-
-    public JTextField getUrlTextField() {
+    public JTextField getUrlField() {
         return urlTextField;
     }
 
@@ -209,11 +199,11 @@ public class WebCrawlerFrame extends JFrame {
         return runButton;
     }
 
-    public JTextField getWorkersTextField() {
+    public JTextField getWorkersField() {
         return workersTextField;
     }
 
-    public JTextField getDepthTextField() {
+    public JTextField getDepthField() {
         return depthTextField;
     }
 
@@ -221,7 +211,7 @@ public class WebCrawlerFrame extends JFrame {
         return depthCheckBox;
     }
 
-    public JTextField getTimeLimitTextField() {
+    public JTextField getTimeLimitField() {
         return timeLimitTextField;
     }
 
@@ -229,11 +219,11 @@ public class WebCrawlerFrame extends JFrame {
         return timeLimitEnabledCB;
     }
 
-    public JLabel getElapsedTimeLabel() {
-        return elapsedTimeActual;
+    public JLabel getElapsedTimeDisplay() {
+        return elapsedTimeCounter;
     }
 
-    public JLabel getParsedPagesActual() {
+    public JLabel getParsedPagesDisplay() {
         return parsedPagesActual;
     }
 

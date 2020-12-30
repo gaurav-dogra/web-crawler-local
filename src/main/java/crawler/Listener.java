@@ -3,64 +3,84 @@ package crawler;
 import org.slf4j.Logger;
 
 import javax.swing.*;
-import java.io.IOException;
+import java.awt.event.ActionEvent;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
+// Controller
 public class Listener {
 
     private final Set<UrlAndData> urlsDataCollected = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private final Set<UrlAndData> previousData = new HashSet<>();
-    private MyTimer timer;
     private final Logger logger = MyLogger.getLogger();
-    private static final int DEFAULT_TIME_LIMIT_SECONDS = 90_000;
+    private static final Long DEFAULT_TIME_LIMIT_SECONDS = 150L;
     private static final int DEFAULT_DEPTH = 2;
     private static final int DEFAULT_NO_OF_WORKERS = 10;
     private int noOfWorkers;
     private int prescribedDepth;
     private boolean isTimeLimited = false;
     private boolean isDepthLimited = false;
+    private long timeLimit;
+    private final WebCrawlerFrame window;
+    private long startTime;
 
-    public void startCrawling(WebCrawlerFrame crawler) {
+    public Listener(WebCrawlerFrame window) {
+        this.window = window;
+    }
 
-        long startingTime = System.currentTimeMillis();
-        crawler.getRunButton().setEnabled(false);
+    public void start() {
 
-        if (crawler.getTimeLimitCheckBox().isEnabled()) {
-            isTimeLimited = true;
-            startTimer(crawler.getElapsedTimeLabel(), getTimeLimit(crawler.getTimeLimitTextField().getText()));
-        }
+        isTimeLimited = window.getTimeLimitCheckBox().isSelected();
+        setupActionListeners();
 
-        if (crawler.getDepthCheckBox().isEnabled()) {
-            isDepthLimited = true;
-            prescribedDepth = getDepth(crawler.getDepthTextField().getText());
-        }
 
-        noOfWorkers = getNumberOfWorkers(crawler.getWorkersTextField().getText());
-
-        String inputUrl = crawler.getUrlTextField().getText().toLowerCase();
-        urlsDataCollected.clear();
-        crawlFirstUrl(inputUrl);
-        System.out.println("And " + urlsDataCollected.size() + " url's Data collected");
-        System.out.println("Time taken = " + (System.currentTimeMillis() - startingTime));
+//        if (window.getDepthCheckBox().isSelected()) {
+//            isDepthLimited = true;
+//            prescribedDepth = getDepth(window.getDepthField().getText());
+//        }
+//
+//        noOfWorkers = getNumberOfWorkers(window.getWorkersField().getText());
+//
+//        String inputUrl = window.getUrlField().getText().toLowerCase();
+//        urlsDataCollected.clear();
+//        System.out.println("inputUrl = " + inputUrl);
+//        System.out.println("noOfWorkers = " + noOfWorkers);
+//        System.out.println("prescribedDepth = " + prescribedDepth);
+//        System.out.println("isTimeLimited = " + isTimeLimited);
+//        System.out.println("isDepthLimited = " + isDepthLimited);
+//        crawlFirstUrl(inputUrl);
+//        System.out.println("And " + urlsDataCollected.size() + " url's Data collected");
 //        printResultsToFile();
     }
 
-    private void startTimer(JLabel elapsedTimeLabel, long timeLimitSeconds) {
-        timer = new MyTimer(elapsedTimeLabel, timeLimitSeconds);
-        timer.execute();
+    private void setupActionListeners() {
+        window.getRunButton().addActionListener(e -> {
+            startTime = System.currentTimeMillis();
+            timeLimit = getTimeLimit();
+            final int oneSecondDelay = 1000;
+            Timer timer = new Timer(oneSecondDelay, this::timerThreadExecute);
+            timer.setInitialDelay(100);
+            timer.start();
+        });
     }
 
-    private Long getTimeLimit(String userInputtedTimeLimit) {
-        long timeLimitSeconds;
+    private long getTimeLimit() {
+        String timeLimitInput = window.getTimeLimitField().getText();
+        Long timeLimit = null;
+        if (!timeLimitInput.equals("")) {
+            timeLimit = parseInputToLong(timeLimitInput);
+        }
+        if (timeLimit == null) {
+            timeLimit = DEFAULT_TIME_LIMIT_SECONDS;
+        }
+        return timeLimit;
+    }
+
+    private Long parseInputToLong(String timeLimitInput) {
+        Long timeLimitSeconds = null;
         try {
-            timeLimitSeconds = Long.parseLong(userInputtedTimeLimit);
-        } catch (NumberFormatException e) {
-            timeLimitSeconds = DEFAULT_TIME_LIMIT_SECONDS;
+            timeLimitSeconds = Long.parseLong(timeLimitInput);
+        } catch (NumberFormatException ignored) {
         }
         return timeLimitSeconds;
     }
@@ -88,66 +108,88 @@ public class Listener {
         UrlAndData data;
         try {
             data = process(inputUrl);
-        } catch (IOException e) {
+        } catch (Exception e) {
             System.out.println("The inputted Url is not correct");
             return;
         }
         urlsDataCollected.add(data);
-        int currentDepth = 0;
-        System.out.println(data.getUrls());
-        System.out.println("Size() " + data.getUrls().size());
-//        crawlOnwards(data.getUrls(), currentDepth);
+        crawlOnwards(data.getUrls(), 1);
     }
 
-    private UrlAndData process(String url) throws IOException {
+    private UrlAndData process(String url) throws WebCrawlerException {
         UrlProcessingService service = new UrlProcessingService();
         String htmlText = service.getHtml(url);
         String title = service.getTitle(htmlText);
         Set<String> urls = service.collectUrls(htmlText);
+        System.out.println("url: " + url + " title: " + title);
+//        System.out.println("urls.size() = " + urls.size());
         return new UrlAndData(url, title, urls);
     }
 
     private void crawlOnwards(Set<String> urlCollection, int currentDepth) {
-        if (depthExceedLimit(++currentDepth) || elapsedTimeExceedLimit()) {
+        if (elapsedTimeExceedLimit()) {
             return;
         }
-
+        if (isDepthLimited && prescribedDepth < currentDepth) {
+            return;
+        }
         ExecutorService executor = Executors.newFixedThreadPool(noOfWorkers);
-//        System.out.println("urlCollection = " + urlCollection);
+        final Set<String> currentLevelUrlCollection = Collections.newSetFromMap(new ConcurrentHashMap<>());
         for (String url : urlCollection) {
-
             executor.execute(() -> {
                 try {
-                    urlsDataCollected.add(process(url));
-                } catch (IOException | IllegalArgumentException e) {
+                    UrlAndData data = process(url);
+                    urlsDataCollected.add(data);
+                    currentLevelUrlCollection.addAll(data.getUrls());
+                } catch (WebCrawlerException e) {
                     System.out.println("Not able to process " + url);
                 }
             });
         }
         executor.shutdown();
-
-        Set<String> currentLevelUrls = getCurrentLevelUrls();
-        previousData.addAll(urlsDataCollected);
-        crawlOnwards(currentLevelUrls, currentDepth);
-    }
-
-    private Set<String> getCurrentLevelUrls() {
-        Set<UrlAndData> currentLevelUrlsAndData = new HashSet<>(urlsDataCollected);
-        currentLevelUrlsAndData.removeAll(previousData);
-        Set<String> currentLevelUrls = new HashSet<>();
-        for (UrlAndData data : currentLevelUrlsAndData) {
-            currentLevelUrls.addAll(data.getUrls());
+        try {
+            boolean isFinished = executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException ignored) {
+            return;
         }
-        return currentLevelUrls;
+        System.out.println(currentLevelUrlCollection.size() + " urls collected at level " + currentDepth);
+        crawlOnwards(currentLevelUrlCollection, ++currentDepth);
     }
 
     private boolean elapsedTimeExceedLimit() {
-        return isTimeLimited && timer.isDone();
+        return false;
     }
 
-    private boolean depthExceedLimit(int currentDepth) {
-        return isDepthLimited && currentDepth > prescribedDepth;
+    public void timerThreadExecute(ActionEvent ae) {
+        SwingWorker<String, Void> sWorker = new SwingWorker<>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                long millisecondsElapsed = System.currentTimeMillis() - startTime;
+                long elapsedSeconds = millisecondsElapsed / 1000;
+                System.out.println("elapsedSeconds = " + elapsedSeconds);
+                System.out.println("timeLimit = " + timeLimit);
+                if (elapsedSeconds >= timeLimit) {
+                    System.out.println("Listener.doInBackground Inside If");
+                    Timer t = (Timer) ae.getSource();
+                    t.stop();
+                }
+                long second = elapsedSeconds % 60;
+                long minute = (elapsedSeconds / 60) % 60;
+                return String.format("%02d:%02d", minute, second);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    window.getElapsedTimeDisplay().setText(get());
+                } catch (InterruptedException | ExecutionException interruptedException) {
+                    interruptedException.printStackTrace();
+                }
+            }
+        };
+        sWorker.execute();
     }
+}
 
 
 //    private void printResultsToFile() {
@@ -172,4 +214,3 @@ public class Listener {
 //
 //    }
 
-}

@@ -18,7 +18,7 @@ public class UrlProcessingService {
             inputStream = new BufferedInputStream(new URL(url).openStream());
             return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException | IllegalArgumentException e) {
-            throw new WebCrawlerException(e.getMessage());
+            throw new WebCrawlerException(e.getMessage() + "url: " + url);
         }
     }
 
