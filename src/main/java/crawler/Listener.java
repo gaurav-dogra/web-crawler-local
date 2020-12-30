@@ -54,14 +54,19 @@ public class Listener {
     }
 
     private void setupActionListeners() {
-        window.getRunButton().addActionListener(e -> {
+        JToggleButton runBtn = window.getRunButton();
+        runBtn.addActionListener(e -> {
             startTime = System.currentTimeMillis();
             timeLimit = getTimeLimit();
+            runBtn.setEnabled(false);
+            runBtn.setText("Wait..");
             final int oneSecondDelay = 1000;
             Timer timer = new Timer(oneSecondDelay, this::timerThreadExecute);
             timer.setInitialDelay(100);
             timer.start();
         });
+        runBtn.setEnabled(true);
+        runBtn.setText("Run");
     }
 
     private long getTimeLimit() {
@@ -166,12 +171,12 @@ public class Listener {
             protected String doInBackground() throws Exception {
                 long millisecondsElapsed = System.currentTimeMillis() - startTime;
                 long elapsedSeconds = millisecondsElapsed / 1000;
-                System.out.println("elapsedSeconds = " + elapsedSeconds);
-                System.out.println("timeLimit = " + timeLimit);
                 if (elapsedSeconds >= timeLimit) {
-                    System.out.println("Listener.doInBackground Inside If");
                     Timer t = (Timer) ae.getSource();
                     t.stop();
+                    JToggleButton runBtn = window.getRunButton();
+                    runBtn.setText("Run");
+                    runBtn.setEnabled(true);
                 }
                 long second = elapsedSeconds % 60;
                 long minute = (elapsedSeconds / 60) % 60;
