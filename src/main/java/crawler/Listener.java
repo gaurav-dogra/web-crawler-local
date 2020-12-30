@@ -31,13 +31,11 @@ public class Listener {
     public void start() {
 
         isTimeLimited = window.getTimeLimitCheckBox().isSelected();
-        setupActionListeners();
+        addRunBtnListener();
 
 
-//        if (window.getDepthCheckBox().isSelected()) {
-//            isDepthLimited = true;
-//            prescribedDepth = getDepth(window.getDepthField().getText());
-//        }
+        isDepthLimited = window.getDepthCheckBox().isSelected();
+            prescribedDepth = getDepth(window.getDepthField().getText());
 //
 //        noOfWorkers = getNumberOfWorkers(window.getWorkersField().getText());
 //
@@ -53,11 +51,11 @@ public class Listener {
 //        printResultsToFile();
     }
 
-    private void setupActionListeners() {
+    private void addRunBtnListener() {
         JToggleButton runBtn = window.getRunButton();
         runBtn.addActionListener(e -> {
             startTime = System.currentTimeMillis();
-            timeLimit = getTimeLimit();
+            UserInput inputs = new UserInput(window);
             runBtn.setEnabled(false);
             runBtn.setText("Wait..");
             final int oneSecondDelay = 1000;

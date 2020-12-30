@@ -30,7 +30,7 @@ public class WebCrawlerFrame extends JFrame {
     private final JLabel parsedPagesActual = new JLabel("0");
     //seventh row
     private final JLabel exportLabel = new JLabel("Export:");
-    private final JTextField exportUrlTextField = new JTextField();
+    private final JTextField exportUrlField = new JTextField();
     private final JButton exportButton = new JButton("Save");
 
     public WebCrawlerFrame() {
@@ -45,7 +45,7 @@ public class WebCrawlerFrame extends JFrame {
         depthTextField.setName("DepthTextField");
         depthCheckBox.setName("DepthCheckBox");
         parsedLabel.setName("ParsedLabel");
-        exportUrlTextField.setName("ExportUrlTextField");
+        exportUrlField.setName("ExportUrlTextField");
         exportButton.setName("ExportButton");
 
     }
@@ -172,7 +172,7 @@ public class WebCrawlerFrame extends JFrame {
         constraints.gridy = 6;
         constraints.gridx = 1;
         constraints.gridwidth = 2;
-        addComponent(pane, exportUrlTextField, constraints);
+        addComponent(pane, exportUrlField, constraints);
 
         constraints = getFreshConstraints();
         constraints.gridy = 6;
@@ -227,8 +227,8 @@ public class WebCrawlerFrame extends JFrame {
         return parsedPagesActual;
     }
 
-    public JTextField getExportUrlTextField() {
-        return exportUrlTextField;
+    public JTextField getExportUrlField() {
+        return exportUrlField;
     }
 
     public JButton getExportButton() {
