@@ -70,7 +70,7 @@ public class Listener {
         if (!timeLimitInput.equals("")) {
             timeLimit = parseInputToLong(timeLimitInput);
         }
-        if (timeLimit == null) {
+        if (timeLimit == null || !window.getTimeLimitCheckBox().isSelected()) {
             timeLimit = DEFAULT_TIME_LIMIT_SECONDS;
         }
         return timeLimit;
